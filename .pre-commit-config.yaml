@@ -1,0 +1,15 @@
+# Checks that run on YOUR computer before each commit is made:
+#   pip install -e ".[dev]" && pre-commit install      (once)
+# A commit that contains something that looks like a key is stopped before it exists.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: ruff check
+        language: system
+        types: [python]

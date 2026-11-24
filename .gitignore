@@ -25,3 +25,7 @@ artifacts/
 *.egg-info/
 .ruff_cache/
 .import_linter_cache/
+
+# Plain-text settings files in configs/ never enter git. Only the ENCRYPTED one does.
+configs/*.env
+!configs/secrets.enc.env

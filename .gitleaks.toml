@@ -1,0 +1,18 @@
+# Secret scanning settings for gitleaks (before each commit, and in the pipeline).
+# The built-in rules, plus two short, written-out exceptions. Exceptions are kept to the
+# minimum: every one of them weakens the scan a little.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake values made on purpose for tests and drills; never real keys"
+regexes = [
+  '''sk-not-a-real-key-123''',
+  '''practice-only-0123456789abcdefgh''',
+]
+
+[[allowlists]]
+description = "The SOPS file is encrypted. tests/unit/test_repository_hygiene.py checks that every value in it is still ENC[...]"
+paths = [
+  '''^configs/secrets\.enc\.env$''',
+]

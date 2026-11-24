@@ -21,7 +21,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # matplotlib is only needed by scripts/save_golden.py, which runs the notebook's own cells.
-dev = ["pytest>=8", "pytest-cov", "httpx", "ruff", "import-linter", "matplotlib"]
+dev = [
+    "pytest>=8", "pytest-cov", "httpx", "ruff", "import-linter", "matplotlib", "pre-commit",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
