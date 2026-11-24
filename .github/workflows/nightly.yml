@@ -1,0 +1,27 @@
+# The slow checks, once a night: they need the real price source, which can be slow or refuse
+# us, so they would make every pull request flaky. A red nightly run means "look at the model
+# or the data", not "the last change broke something".
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 1 * * *"        # 04:17 Riyadh time, every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  network-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: Full golden check, the quality bar against the naive guess, and the data checks
+        run: pytest -m network -v

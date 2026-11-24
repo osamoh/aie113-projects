@@ -1,0 +1,8 @@
+# Once a week, propose a pull request when a GitHub Action we use has a newer version.
+# Each proposal goes through the same pipeline before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
