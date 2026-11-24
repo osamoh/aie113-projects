@@ -22,3 +22,7 @@ class Settings(BaseSettings):
     model_path: Path = Path("artifacts/model.joblib")
     meta_path: Path = Path("artifacts/model_meta.json")
     lookback_days: int = 90               # calendar days of prices fetched for one forecast
+    price_cache_minutes: float = 15       # how long downloaded prices are remembered
+    top_reasons: int = 3                  # how many reasons the API shows with a forecast
+    log_level: str = "INFO"
+    git_sha: str = "dev"                  # which version of the code is running
