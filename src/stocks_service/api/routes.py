@@ -1,7 +1,9 @@
+import hmac
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Security
+from fastapi.security import APIKeyHeader
 
 from stocks_service.api.schemas import ForecastRequest, ForecastResponse, HealthResponse
 from stocks_service.domain.market import latest_complete_day
@@ -19,12 +21,35 @@ def get_forecaster(request: Request) -> ForecastService:
     return forecaster
 
 
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False,
+                              description="Needed for /v1/forecast when the service has a key.")
+
+
+def require_api_key(request: Request,
+                    sent: Annotated[str | None, Security(api_key_header)] = None) -> None:
+    """Let the request through only with the right key, when the service has one."""
+    settings = getattr(request.app.state, "settings", None)
+    if settings is None:  # start-up is not finished: refuse rather than guess whether to check
+        raise HTTPException(status_code=503, detail="Model not ready",
+                            headers={"Retry-After": "5"})
+    expected = settings.api_key
+    if expected is None:
+        return
+    # compare_digest takes the same time whether the first or the last character is wrong,
+    # so the key cannot be guessed one character at a time by measuring response times.
+    if sent is None or not hmac.compare_digest(sent.encode(),
+                                               expected.get_secret_value().encode()):
+        raise HTTPException(status_code=401, detail="Missing or wrong API key",
+                            headers={"WWW-Authenticate": "ApiKey"})
+
+
 def get_now() -> datetime:
     """The clock, as a replaceable function, so a test can ask "what if it were 10 am?"."""
     return datetime.now(UTC)
 
 
-@router.post("/forecast", response_model=ForecastResponse)
+@router.post("/forecast", response_model=ForecastResponse,
+             dependencies=[Depends(require_api_key)])
 def forecast(body: ForecastRequest, request: Request, response: Response,
              forecaster: Annotated[ForecastService, Depends(get_forecaster)],
              now: Annotated[datetime, Depends(get_now)]):

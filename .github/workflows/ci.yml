@@ -59,10 +59,22 @@ jobs:
           name: coverage
           path: htmlcov/
 
+  secret-scan:                  # no key, token or password anywhere in the code or its history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0        # the whole history: a deleted secret is still in old commits
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --verbose
+
   image-smoke:                  # build the image once and prove the PACKED service works
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [lint, test]
+    needs: [lint, test, secret-scan]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -81,9 +93,19 @@ jobs:
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Make a throw-away API key for this run only
+        # No stored secret is needed to test: a fresh random key is made, hidden in the log,
+        # handed to the container as a file, and gone when the run ends.
+        run: |
+          key="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$key"
+          echo "SMOKE_API_KEY=$key" >> "$GITHUB_ENV"
+          printf '%s' "$key" > "$RUNNER_TEMP/stocks_api_key"
       - name: Start the container and wait until it reports healthy
         run: |
-          docker run -d --name svc -p 8000:8000 stocks-service:ci
+          docker run -d --name svc -p 8000:8000 \
+            -v "$RUNNER_TEMP/stocks_api_key:/run/secrets/stocks_api_key:ro" \
+            stocks-service:ci
           for i in $(seq 1 30); do
             status="$(docker inspect --format '{{.State.Health.Status}}' svc)"
             [ "$status" = "healthy" ] && break
@@ -93,8 +115,13 @@ jobs:
           [ "$status" = "healthy" ] || { docker logs svc; exit 1; }
       - name: The container runs as a normal user, not root
         run: test "$(docker exec svc whoami)" = "appuser"
-      - name: Smoke tests against the running container
+      - name: Smoke tests against the running container (with and without the key)
         run: pytest -m smoke -v
+      - name: The key never appears in the container's log
+        run: |
+          docker logs svc > "$RUNNER_TEMP/svc.log" 2>&1
+          if grep -qF "$SMOKE_API_KEY" "$RUNNER_TEMP/svc.log"; then exit 1; fi
+          grep -q "API key protection: on" "$RUNNER_TEMP/svc.log"
       - name: Container log (for reading when something failed)
         if: always()
         run: docker logs svc

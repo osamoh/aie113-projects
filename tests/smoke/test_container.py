@@ -17,12 +17,14 @@ import pytest
 pytestmark = pytest.mark.smoke
 
 URL = os.environ.get("SMOKE_URL", "http://localhost:8000")
+API_KEY = os.environ.get("SMOKE_API_KEY")  # the key the container was started with, if any
 
 
 @pytest.fixture(scope="module")
 def service():
     # trust_env=False: talk to the container directly, never through a proxy.
-    with httpx.Client(base_url=URL, timeout=30, trust_env=False) as client:
+    headers = {"X-API-Key": API_KEY} if API_KEY else {}
+    with httpx.Client(base_url=URL, timeout=30, trust_env=False, headers=headers) as client:
         yield client
 
 
@@ -54,3 +56,16 @@ def test_a_forecast_request_gets_an_answer_or_our_own_clear_error(service):
         assert response.status_code == 503, response.text
         assert response.json()["error"]["code"] in {"PRICE_SOURCE_UNAVAILABLE",
                                                     "NOT_ENOUGH_PRICES"}
+
+
+@pytest.mark.skipif(not API_KEY, reason="the container was started without an API key")
+def test_without_the_key_a_forecast_is_refused():
+    with httpx.Client(base_url=URL, timeout=30, trust_env=False) as anonymous:
+        missing = anonymous.post("/v1/forecast", json={"ticker": "2222.SR"})
+        wrong = anonymous.post("/v1/forecast", json={"ticker": "2222.SR"},
+                               headers={"X-API-Key": "not-the-key-" + "x" * 20})
+
+    for response in (missing, wrong):
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "UNAUTHORIZED"
+        assert API_KEY not in response.text

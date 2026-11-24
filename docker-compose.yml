@@ -1,6 +1,10 @@
-# Start the service with one command:   docker compose up --build -d
-# See whether it is healthy:            docker compose ps
-# Stop it:                              docker compose down
+# Start the service with one command, getting the API key from the encrypted secrets file:
+#   sops exec-env configs/secrets.enc.env 'docker compose up --build -d'
+# See whether it is healthy:   docker compose ps
+# Stop it:                     docker compose down
+#
+# Without STOCKS_API_KEY in the environment, Compose refuses to start: the container path
+# never runs unprotected by accident.
 services:
   stocks-api:
     build:
@@ -12,8 +16,14 @@ services:
       - "8000:8000"          # your machine's port 8000 -> the container's port 8000
     environment:
       # Configuration comes from the environment, so one image runs everywhere.
-      # Secrets never go in this file (Stage 6).
+      # Secrets never go here: an environment variable shows up in `docker inspect`.
       STOCKS_LOG_LEVEL: INFO
+    secrets:
+      - stocks_api_key       # appears inside the container as /run/secrets/stocks_api_key
     mem_limit: 512m          # a runaway process cannot take the whole machine
     restart: unless-stopped  # come back after a crash or a reboot
     # The health check itself is defined in the Dockerfile (it calls /v1/ready).
+
+secrets:
+  stocks_api_key:
+    environment: STOCKS_API_KEY   # taken from the environment Compose runs in, never a file in git

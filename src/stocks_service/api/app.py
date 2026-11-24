@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from stocks_service.adapters.cached_prices import CachedPriceSource
 from stocks_service.adapters.ridge_model import JoblibModelStore
 from stocks_service.adapters.yahoo_prices import YahooPriceSource
+from stocks_service.api.log_masking import install_secret_masking
 from stocks_service.api.routes import router
 from stocks_service.config import Settings
 from stocks_service.domain.errors import NotEnoughHistory, PriceSourceUnavailable, UnknownTicker
@@ -32,8 +33,13 @@ SAFE_TRACE_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """The model loads HERE, once, when the service starts: visible, timed, failable."""
-    settings = Settings()
+    settings = Settings.load()
     logging.basicConfig(level=settings.log_level)
+    install_secret_masking([settings.api_key.get_secret_value()] if settings.api_key else [])
+    if settings.api_key is None:
+        log.warning("no API key configured: POST /v1/forecast is open to anyone who can reach it")
+    else:
+        log.info("API key protection: on")  # never the key itself
     app.state.settings = settings
     app.state.started_at = datetime.now(UTC)
 
@@ -109,7 +115,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
-        code = {404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED",
+        code = {401: "UNAUTHORIZED", 404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED",
                 503: "MODEL_UNAVAILABLE"}.get(exc.status_code, "HTTP_ERROR")
         return _error(request, exc.status_code, code, str(exc.detail), headers=exc.headers)
 

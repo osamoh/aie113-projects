@@ -78,7 +78,7 @@ def main() -> None:
                           "default: the latest finished trading day")
     args = parser.parse_args()
 
-    settings = Settings()
+    settings = Settings.load()
     try:
         if args.command == "train":
             train(settings)
