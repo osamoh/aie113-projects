@@ -382,6 +382,152 @@ tests was too weak.
 
 ---
 
+## Stage 5: GitHub Actions · GitHub Actions
+
+**Status: DRAFT by the agent.** I asked the agent to do Stages 5 and 6 in one go and then tell
+me which decisions it made, so this stage was not explained and agreed step by step before it
+was built. The decisions are listed below so I can check each one.
+
+**What we asked the agent · ما طلبناه من الوكيل**
+- "Continue all stages all at once and, once you have finished, tell me in summary what
+  decisions you made."
+
+**What it built · ما بناه**
+- `.github/workflows/ci.yml`, on every pull request and every push to `main`:
+  `lint` (ruff, import rules), `test` (fast tests, 80% coverage gate, the coverage report kept
+  as evidence), `secret-scan` (gitleaks over the whole history), `image-smoke` (build the
+  image, wait for healthy, check the user is `appuser`, run the smoke tests with a throw-away
+  key, check the key is not in the log), and `publish` (only on `main`: push the image to
+  `ghcr.io/osamoh/aie113-projects` tagged with the commit and `main`).
+- `.github/workflows/nightly.yml`: the slow tests against the real price source, every night
+  at 04:17 Riyadh time, and on demand.
+- `.github/dependabot.yml`: a weekly pull request when an Action we use has a newer version.
+
+**Decisions the agent made · قرارات اتخذها الوكيل**
+- The default permission for every job is "read the code". Only `publish` may write packages.
+- The slow tests run nightly, not on every pull request: the price source can be slow or refuse
+  us, which would make pull requests fail for reasons that are not the change.
+- The image is tagged with the commit it was built from, plus a moving `main` tag. No `latest`.
+- Action versions are the ones the course's Lab 5 uses (`checkout@v6`, `build-push-action@v7`
+  and so on), named by version tag, not by commit fingerprint.
+
+**What we checked, and what we saw · ما تحققنا منه وما رأيناه**
+- `actionlint` (a checker for workflow files): no problems in either file.
+- The agent ran each job's commands in its own workspace: lint passed; 128 tests passed with 93%
+  coverage; the image built, reported healthy, ran as `appuser`, and the 4 smoke tests passed.
+- **Not yet seen running on GitHub.** GitHub switches Actions off on a fork until the owner
+  switches them on, and the agent cannot change repository settings.
+- Mine to do on GitHub (see "Steps only I can do" at the end of Stage 6).
+
+**What surprised us or went wrong · ما فاجأنا أو ما تعثرنا فيه**
+- In the agent's workspace the container could not reach Yahoo, so the smoke test passed through
+  its "price source unavailable" branch. On GitHub's machines it should get a real forecast.
+
+**How we would explain this stage to a colleague · كيف نشرح هذه المرحلة لزميل**
+(Agent's draft, to rewrite in my own words.) The pipeline is a checklist GitHub runs on every
+change: style and layer rules first because they are fastest, then the tests, then a scan for
+secrets, then it builds the real image and tests the running container. Only a change that has
+reached `main` publishes the image, and only that one step may write to the registry. With branch
+protection on, nothing reaches `main` without passing all four checks.
+
+**Open questions · أسئلة ما زالت مفتوحة**
+- Should the Actions be named by commit fingerprint instead of version tag, so a moved tag cannot
+  change what runs?
+- A red nightly run needs someone to notice it. Who, and how?
+
+---
+
+## Stage 6: Secrets · الأسرار
+
+**Status: DRAFT by the agent.** Built in the same "all at once" request as Stage 5.
+
+**What we asked the agent · ما طلبناه من الوكيل**
+- The same request as Stage 5.
+
+**What it built · ما بناه**
+- The practice secret: an **API key for our own forecast address**. `POST /v1/forecast` needs
+  the header `X-API-Key` when the service has a key; health, readiness and model-info stay open.
+- `config.py`: the key is a `SecretStr`, read from `/run/secrets/stocks_api_key` or from
+  `STOCKS_API_KEY`; at least 24 characters; a refused value is never repeated in the error.
+- `api/routes.py`: the key check (constant-time comparison, 401 in our error shape, checked
+  before the request body is read).
+- `api/log_masking.py`: a safety net that replaces the key with `***` in every log line,
+  tracebacks included.
+- `docker-compose.yml`: the key reaches the container as a secret file; Compose refuses to
+  start without it.
+- `scripts/secrets_init.sh`: makes my age key pair, `.sops.yaml` and the encrypted
+  `configs/secrets.enc.env`. `scripts/with_secrets.sh`: runs one command with the key.
+- `.gitleaks.toml`, `.pre-commit-config.yaml`, the `secret-scan` job: secret scanning before
+  each commit and in the pipeline.
+- `tests/unit/test_secrets.py`, `tests/integration/test_api_key.py`,
+  `tests/unit/test_repository_hygiene.py`: 25 new tests.
+- `SECURITY.md`: the path the key takes, and the incident plan.
+
+**Decisions the agent made · قرارات اتخذها الوكيل**
+- The secret is a key for our own API, not a paid data feed: we have no paid feed, and our own
+  key can be tested end to end. A data-feed key would follow the same path.
+- Without a key the service still starts with the forecast open (a warning in the log), so
+  local development and tests stay simple. The container path refuses to start without one.
+- The container gets the key as a file, not an environment variable, so `docker inspect` does
+  not show it.
+- The pipeline needs no stored secret: each run makes a fresh random key for the smoke test.
+- No OIDC and no cloud: the project deploys nowhere. `SECURITY.md` says what to do when it does.
+- The encrypted file is **not** in the repository yet: it must be encrypted for **my** public
+  key, which only exists once I run `scripts/secrets_init.sh` on my own computer.
+- gitleaks skips `configs/secrets.enc.env` because it is encrypted; a test checks that every
+  value in it really is `ENC[...]`. Two written-out fake values are also allowed.
+
+**What we checked, and what we saw · ما تحققنا منه وما رأيناه**
+All of this was run by the agent in its own workspace.
+- Tests: 152 passed, 1 skipped (the encrypted file does not exist yet).
+- Container through Compose: without `STOCKS_API_KEY`, Compose refused to start. With a fresh
+  random key: healthy; a forecast without the key got 401 `UNAUTHORIZED`; with it, 200; the 5
+  smoke tests passed. The key was found **0 times** in `docker inspect`, the container's log,
+  the container's environment and the saved image.
+- A key shorter than 24 characters stops start-up with "api_key must be at least 24 characters
+  long", without printing the value.
+- Broken on purpose: a plain `configs/oops.env` was staged in git; the hygiene test failed
+  naming the file. Undone.
+- **Not run by the agent:** `sops`, `age` and `gitleaks` themselves. Downloading them into the
+  agent's workspace was not allowed, so the set-up script was tested only with stand-in
+  commands (base64 in place of encryption). That test showed the script's flow: a private key
+  file only I can read, a plain value that never touches the disk, no overwrite on a second run,
+  and the key reaching only the command it is given to.
+
+**What surprised us or went wrong · ما فاجأنا أو ما تعثرنا فيه**
+- The settings library printed a refused value in its error, the same problem as in Stage 3.
+  Found by a test; fixed with one setting (`hide_input_in_errors`).
+- A forecast request arriving during start-up crashed the key check (500) instead of getting
+  "not ready" (503). Found by an existing test; fixed so the check refuses.
+- A masking test passed alone but failed with the others: a second start-up in the same process
+  kept the first start-up's filter, which knew a different key. Fixed by replacing old filters.
+
+**Steps only I can do · خطوات لا يقوم بها إلا أنا**
+1. Actions tab → enable workflows on the fork.
+2. Settings → Code security → turn on secret scanning and push protection.
+3. Settings → Branches → a rule for `main`: require a pull request, and require the checks
+   `lint`, `test`, `secret-scan` and `image-smoke` to pass.
+4. On my Mac: `brew install sops age`, `scripts/secrets_init.sh`, commit `.sops.yaml` and
+   `configs/secrets.enc.env` through a pull request, `pre-commit install`.
+5. The drills: open a pull request with a failing test and see merging blocked; commit a fake
+   key on a local branch and see gitleaks stop it (never push it).
+
+**How we would explain this stage to a colleague · كيف نشرح هذه المرحلة لزميل**
+(Agent's draft, to rewrite in my own words.) Our one secret is the API key for the forecast. In
+git it exists only encrypted, so the repository can be public; only my private key, which never
+leaves my computer, can open it. When the service runs, the key arrives as a file, is held in a
+setting that prints as stars, and a log filter hides it if it ever slips into a message. The
+pipeline does not need it at all: it makes a throw-away key for each test run. If the key
+leaks, we make it useless first by replacing it, and only then clean up.
+
+**Open questions · أسئلة ما زالت مفتوحة**
+- With only one person holding a private key, losing my laptop means losing access to the
+  secrets file. Who else should hold a key, or where is a backup kept?
+- Should the forecast address refuse to start without a key everywhere, not only in the
+  container?
+
+---
+
 Stages: 0 Track and model · 1 Clean architecture · 2 FastAPI endpoint · 3 Container ·
 4 Tests · 5 GitHub Actions · 6 Secrets · Extension: React front end (optional)
 

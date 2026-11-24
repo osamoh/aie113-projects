@@ -69,15 +69,28 @@ curl -s localhost:8000/v1/model-info
 | `GET /v1/ready` | Is the model loaded? |
 | `GET /v1/model-info` | The model's facts: version, inputs, training dates, test numbers |
 
+Started this way, without a key, the forecast address is open (the log says so). With
+`STOCKS_API_KEY` set, or the file `/run/secrets/stocks_api_key` present, every forecast request
+needs the header `X-API-Key`; `/docs` then shows an "Authorize" button for it.
+
 Every error has one shape, `{"error": {"code", "message", "trace_id"}}`, and never repeats what
 was sent. Only finished trading days count: today's price is used from 4:00 pm Riyadh time.
 
 ## The container
 
+The container always needs the API key (see [SECURITY.md](SECURITY.md)). Once, on your machine:
+
 ```bash
-docker compose up --build -d      # build the image and start the service
-docker compose ps                 # wait for "(healthy)"
-curl -s localhost:8000/v1/forecast -H "content-type: application/json" -d '{"ticker": "2222.SR"}'
+brew install sops age              # macOS
+scripts/secrets_init.sh            # your age key, .sops.yaml, the encrypted key file
+```
+
+Then:
+
+```bash
+scripts/with_secrets.sh docker compose up --build -d     # build and start, with the key
+docker compose ps                                        # wait for "(healthy)"
+scripts/with_secrets.sh sh -c 'curl -s localhost:8000/v1/forecast -H "X-API-Key: $STOCKS_API_KEY" -H "content-type: application/json" -d "{\"ticker\": \"2222.SR\"}"'
 docker compose down
 ```
 
@@ -88,10 +101,10 @@ The image is built in two stages from `python:3.12-slim`, installs the exact ver
 ## Tests
 
 ```bash
-pytest                                    # 128 fast tests, about a second, no internet
+pytest                                    # the fast tests, about a second, no internet
 pytest --cov --cov-report=term-missing    # the same, plus which lines no test runs
 pytest -m network                         # 4 slow tests against the real price source
-docker compose up --build -d && pytest -m smoke   # 4 tests against the running container
+pytest -m smoke                           # against a running container (SMOKE_API_KEY=its key)
 ```
 
 | Level | What it protects | Where |
@@ -102,6 +115,22 @@ docker compose up --build -d && pytest -m smoke   # 4 tests against the running 
 | Golden | The committed model still gives the notebook's saved answers | `tests/golden/` |
 | Data checks | The real prices are in order, on trading days, fresh and without impossible jumps | `tests/data/` |
 | Smoke | The container starts and answers like our service | `tests/smoke/` |
+
+## The pipeline
+
+Every pull request and every push to `main` runs [.github/workflows/ci.yml](.github/workflows/ci.yml):
+
+| Job | What it checks | Runs after |
+|---|---|---|
+| `lint` | ruff, and the import rules between layers | |
+| `test` | the 128+ fast tests, with at least 80% of the code covered | |
+| `secret-scan` | gitleaks over the whole history | |
+| `image-smoke` | builds the image, waits for healthy, checks it is not root, runs the smoke tests with a throw-away key | the three above |
+| `publish` | pushes the image to `ghcr.io/osamoh/aie113-projects`, tagged with the commit | `image-smoke`, and only on `main` |
+
+[.github/workflows/nightly.yml](.github/workflows/nightly.yml) runs the slow tests against the
+real price source every night at 04:17 Riyadh time. Branch protection on `main` makes the four
+checks required before a pull request can be merged.
 
 ## Where the model and the prices live
 
@@ -121,4 +150,4 @@ uv pip compile pyproject.toml --python-version 3.12 --python-platform linux \
 ## Stages
 
 0 Meet the model · **1 Clean architecture (done)** · **2 FastAPI endpoint (done)** · **3 Container (done)** ·
-**4 Tests (done)** · 5 GitHub Actions · 6 Secrets
+**4 Tests (done)** · **5 GitHub Actions (done)** · **6 Secrets (done)**
