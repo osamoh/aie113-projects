@@ -215,6 +215,84 @@ means exactly that: the model is loaded.
 
 ---
 
+## Stage 3: Container · الحاوية
+
+**Status: DRAFT by the agent.**
+
+**What we asked the agent · ما طلبناه من الوكيل**
+- "Next." The agent explained the idea and asked me to decide two things. I chose its
+  recommendations: the model lives inside the image, and when the price source is down the
+  service gives a clear error instead of old prices.
+
+**What it built · ما بناه**
+- `requirements.lock`: 79 lines, every library pinned to one exact version, resolved for Linux
+  and Python 3.12. No test or lint tools are in it.
+- `Dockerfile`: two stages from `python:3.12-slim`. The builder installs the libraries; the
+  runtime gets them in one copy, then the model, then the code. It creates the user `appuser`,
+  defines a health check that calls `/v1/ready`, and starts the server in list form.
+- `.dockerignore`: refuses everything, then lets in only `requirements.lock`, `models/` and
+  `src/`.
+- `docker-compose.yml`: one command to build and start, port 8000, a 512 MB memory limit.
+- `models/model.joblib` and `models/model_meta.json`: the trained model (1.6 KB) and its facts
+  (1 KB), now in git. `config.py` points to them.
+- `adapters/ridge_model.py`: refuses a model file written by another scikit-learn version.
+
+**What we checked, and what we saw · ما تحققنا منه وما رأيناه**
+All of this was run by the agent in its own workspace (Linux, 2 CPU cores, amd64). That
+workspace reaches the internet through a proxy, so the agent built from a test copy of the
+Dockerfile with certificate lines added. The committed `Dockerfile` has not been built as-is.
+- Image size: 870 MB. The libraries are 537 MB of it; the largest are scipy (139 MB), pandas
+  (81 MB), scikit-learn (49 MB), numpy (43 MB) and curl_cffi (41 MB). The model is 20 KB on
+  disk and the code 115 KB.
+- Build time from nothing: 61 s (30 s installing libraries). Rebuild after a one-line change
+  to `routes.py`: 0.4 s, every layer `CACHED` except the code.
+- The container runs as `appuser` (user number 10001), on Python 3.12.16. It cannot write to
+  `/app/src` or `/app/models`: "Permission denied".
+- Secrets: a `.env` and a `leaked.env` holding a fake key were put in the project folder before
+  the build. A search of the whole image found no `.env` file and no trace of the key.
+- `docker compose up`: "(healthy)" after 5 seconds. Through the container: readiness 200, a
+  forecast in 0.69 s (26.315 SAR against a naive 26.30), `1120.SR` refused with 404, `/docs` 200.
+- Process number 1 is the server itself. `docker compose stop` took 0.6 s and the log shows
+  "shutdown complete". Memory: 145 MiB of the 512 MiB limit.
+- With no network at all: the container stayed healthy, and a forecast returned 503
+  `PRICE_SOURCE_UNAVAILABLE` with `Retry-After: 60` after 10 seconds (one retry).
+- The golden check, run inside the image on its Python 3.12 and locked libraries: 5/5 days
+  match. The committed model gives the notebook's 25.895 SAR for 29 October 2026.
+- Broken on purpose: the line that copies the model was removed from the `Dockerfile`. The
+  image still built, but the container stopped at once ("Exited (3)") with "No trained model
+  at models/model_meta.json". After undoing it: healthy again.
+- Mine to do: `docker compose up --build -d` on my Mac; note the size, the build time and what
+  `docker compose ps` shows. My Mac builds an arm64 image; most servers are amd64.
+
+**What surprised us or went wrong · ما فاجأنا أو ما تعثرنا فيه**
+- The fake `.env` broke a check: the settings refused the unknown line `FAKE_API_KEY` and the
+  error message printed the key's value. An unrelated line in `.env` could stop the service
+  and put a secret in a log. The agent changed the settings to ignore lines they do not know;
+  secret values we do use will need protecting in Stage 6.
+- The image is 870 MB for a model of 1.6 KB. Almost all of it is libraries the model's
+  libraries bring with them.
+- Start-up failed fast and clearly without a model, which is what we want: a container that
+  cannot serve should not look alive.
+
+**How we would explain this stage to a colleague · كيف نشرح هذه المرحلة لزميل**
+(Agent's draft, to rewrite in my own words.) The image is the service packed with everything
+it needs: Python, the exact library versions from the lock file, the model and the code. It is
+built in two rooms; only the installed libraries pass from the building room to the one we
+ship. The order of the steps is from slowest-changing to fastest-changing, so changing code
+rebuilds in under a second. The container runs as a normal user, tells Docker whether the
+model is loaded, and contains no secret, because only three named things are allowed into the
+build. The model lives inside the image, so the image is complete on its own.
+
+**Open questions · أسئلة ما زالت مفتوحة**
+- Could the image be smaller? `fastapi[standard]` brings extras we do not use, and the price
+  library brings a 41 MB download tool. What would we give up?
+- The base image is named by a tag (`python:3.12-slim`) that can move. Should we fix it by its
+  digest?
+- The service runs one worker process. More workers would each keep their own price memory.
+- Should the container's own file system be read-only?
+
+---
+
 Stages: 0 Track and model · 1 Clean architecture · 2 FastAPI endpoint · 3 Container ·
 4 Tests · 5 GitHub Actions · 6 Secrets · Extension: React front end (optional)
 

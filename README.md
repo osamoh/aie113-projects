@@ -24,6 +24,8 @@ src/stocks_service/
   cli.py      the commands that start a job
 scripts/      save and check the notebook's "golden" answers
 tests/golden/ the notebook's answers for five fixed days
+models/       the trained model and its facts file
+Dockerfile, .dockerignore, docker-compose.yml, requirements.lock   the container
 tracks/stocks/  the original notebook and its README
 ```
 
@@ -48,7 +50,6 @@ ruff check src scripts && lint-imports
 ## The API
 
 ```bash
-python -m stocks_service.cli train          # once: the service needs a trained model
 uvicorn stocks_service.api.app:create_app --factory
 ```
 
@@ -71,11 +72,35 @@ curl -s localhost:8000/v1/model-info
 Every error has one shape, `{"error": {"code", "message", "trace_id"}}`, and never repeats what
 was sent. Only finished trading days count: today's price is used from 4:00 pm Riyadh time.
 
-`train` writes `artifacts/model.joblib` and `artifacts/model_meta.json`. They are not stored
-in git: each run creates them again. Price data is never stored in the repository either; it
-is downloaded from Yahoo Finance when a command runs.
+## The container
+
+```bash
+docker compose up --build -d      # build the image and start the service
+docker compose ps                 # wait for "(healthy)"
+curl -s localhost:8000/v1/forecast -H "content-type: application/json" -d '{"ticker": "2222.SR"}'
+docker compose down
+```
+
+The image is built in two stages from `python:3.12-slim`, installs the exact versions in
+`requirements.lock`, runs as the normal user `appuser`, and reports its own readiness. Only
+`requirements.lock`, `models/` and `src/` may enter the build (see `.dockerignore`).
+
+## Where the model and the prices live
+
+The trained model is two small files in `models/` (about 3 KB together). They are stored in
+git and copied into the image, so the image is complete on its own. `train` rewrites them;
+review the change like any code change. Price data is never stored in the repository: it is
+downloaded from Yahoo Finance when a command or a request needs it.
+
+After changing a library in `pyproject.toml`, refresh the lock file:
+
+```bash
+pip install uv
+uv pip compile pyproject.toml --python-version 3.12 --python-platform linux \
+    --no-annotate --no-header -o requirements.lock
+```
 
 ## Stages
 
-0 Meet the model · **1 Clean architecture (done)** · **2 FastAPI endpoint (done)** · 3 Container ·
+0 Meet the model · **1 Clean architecture (done)** · **2 FastAPI endpoint (done)** · **3 Container (done)** ·
 4 Tests · 5 GitHub Actions · 6 Secrets

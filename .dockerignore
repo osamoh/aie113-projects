@@ -1,0 +1,13 @@
+# What may enter the image build. Everything is refused, then three things are let in.
+# A new file (a .env, a key, a dataset, the .git history) stays out unless it is added here
+# on purpose, so a secret cannot slip into the image by accident.
+*
+
+!requirements.lock
+!models/
+!src/
+
+# Inside those folders, leftovers of running the code locally stay out too.
+**/__pycache__
+**/*.pyc
+**/*.egg-info

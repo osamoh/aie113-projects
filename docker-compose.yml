@@ -1,0 +1,19 @@
+# Start the service with one command:   docker compose up --build -d
+# See whether it is healthy:            docker compose ps
+# Stop it:                              docker compose down
+services:
+  stocks-api:
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    image: stocks-service:dev
+    ports:
+      - "8000:8000"          # your machine's port 8000 -> the container's port 8000
+    environment:
+      # Configuration comes from the environment, so one image runs everywhere.
+      # Secrets never go in this file (Stage 6).
+      STOCKS_LOG_LEVEL: INFO
+    mem_limit: 512m          # a runaway process cannot take the whole machine
+    restart: unless-stopped  # come back after a crash or a reboot
+    # The health check itself is defined in the Dockerfile (it calls /v1/ready).
