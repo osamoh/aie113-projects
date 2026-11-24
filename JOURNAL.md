@@ -1,7 +1,12 @@
 # Project journal · سجل المشروع
 
-**Group · المجموعة:** Osama Alghamdi, working alone. AI coding agent: Claude (Anthropic), a
-cloud session in the Claude app, model Claude Fable 5.2.
+**Group · المجموعة:**
+1. Osamah Alghamdi
+2. Sultan Alrasheedi
+3. Mohammed Aldayel
+
+**AI coding agent · وكيل البرمجة:** Claude (Anthropic), a cloud session in the Claude app
+(models Claude Fable 5.2 and Claude Opus 5.5).
 **Track · المسار:** stocks
 **Repository · المستودع:** https://github.com/osamoh/aie113-projects
 
