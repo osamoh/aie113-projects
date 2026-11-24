@@ -1,8 +1,15 @@
 # Stocks forecast service
 
-The final project of **SDA-AIE-113 · Software Engineering Practices for AI Systems** (SDAIA
-Academy), stocks track. It takes the course's starter notebook and turns it, stage by stage,
-into a production-style service, built with an AI coding agent.
+The final project of **SDA-AIE-113 · Software Engineering Practices for AI Systems**
+([SDAIA Academy](https://github.com/SDAIAAcademy)), stocks track. It takes the course's starter
+notebook and turns it, stage by stage, into a production-style service, built with an AI coding
+agent.
+
+## Contributors
+
+1. Osamah Alghamdi
+2. Sultan Alrasheedi
+3. Mohammed Aldayel
 
 > **A teaching example, not investment advice.** The model forecasts the next trading day's
 > closing price of Saudi Aramco (`2222.SR`) and is always shown next to the naive guess
