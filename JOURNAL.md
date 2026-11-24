@@ -293,6 +293,95 @@ build. The model lives inside the image, so the image is complete on its own.
 
 ---
 
+## Stage 4: Tests · الاختبارات
+
+**Status: DRAFT by the agent.**
+
+**What we asked the agent · ما طلبناه من الوكيل**
+- "Next." Before writing any test the agent listed the planned tests in plain sentences,
+  grouped by level, and asked me to decide two things. I chose its recommendations: a quality
+  bar (a retrained model may be at most 5% worse than the naive guess), and one change to the
+  service (it drops any day after the day asked for, whatever the price source sends).
+
+**What it built · ما بناه**
+- `tests/conftest.py`: made-up prices that are the same on every run, a stand-in model, a
+  stand-in price source, and a way to start the API with those put in from outside.
+- `tests/unit/` (76 tests): each of the eight inputs against a hand calculation; each input
+  looks at exactly the days it should; too little history is refused; the naive guess equals
+  today's close; reasons add up; today counts from 16:00 Riyadh, not 15:59; the price memory;
+  the Yahoo adapter drops no-trading days and retries once; the settings.
+- `tests/integration/` (32 tests): a good request has the promised shape; eleven kinds of bad
+  request get the same 422; no error repeats the values the caller sent; unknown ticker 404;
+  price source down 503; a crash gives 500 and leaks nothing; no model file, no start.
+- `tests/behaviour/` (13 tests, the real model): a forecast does not change when later days
+  change; it stays within 3% of today's close over 200 invented price series and a crash;
+  doubling every price doubles it; a flat price gives a forecast within 2 halalas.
+- `tests/golden/` (7 fast, 2 slow): the committed model, given the notebook's saved inputs for
+  the five days, gives the notebook's saved forecasts and reasons; the facts file reports the
+  notebook's numbers. Slow: download, retrain and compare; and the 5% quality bar.
+- `tests/data/` (2 slow): the real prices have no problems and are fresh.
+- `tests/smoke/` (4): against a running container.
+- `domain/data_checks.py`: names what looks wrong in a price history (a day from the future, a
+  Friday, a jump above 15%, prices older than 14 days).
+- `service/forecasting.py`: the guard against days from the future.
+- `pyproject.toml`: plain `pytest` runs everything that needs no internet and no container.
+
+**What we checked, and what we saw · ما تحققنا منه وما رأيناه**
+All of this was run by the agent in its own workspace.
+- `pytest`: 128 passed in about 1 second. By level: unit 0.2 s, integration 0.5 s, behaviour
+  0.4 s, golden 0.1 s.
+- `pytest -m network`: 4 passed in 5 seconds (two downloads and two retrainings).
+- `pytest -m smoke` against the container: 4 passed.
+- Coverage of the fast tests: 93%. The part no fast test runs is most of `cli.py` (37%
+  covered): the `train` and `forecast` commands. `train` worries me most, because it rewrites
+  the model files that ship inside the image. A test for it would run `train` with a stand-in
+  price source into a temporary folder and check that both files appear and that the facts
+  include the naive baseline.
+- Broken on purpose, three times:
+  1. "Move two days ago" made to read three days ago: caught by two unit tests in under a
+     second (after the tests were strengthened, see below).
+  2. The "only the share we trained on" rule switched off: caught by three tests, one at each
+     of the unit, integration and behaviour levels.
+  3. The model quietly replaced by one trained differently: caught by six of the seven fast
+     golden tests. Nothing else noticed.
+- Mine to do: run `pytest` on my Mac, then break one rule myself and watch a test fail.
+
+**What surprised us or went wrong · ما فاجأنا أو ما تعثرنا فيه**
+- The first deliberate break passed all 118 tests that existed then. The hand-made example
+  had two equal moves in a row, so reading the wrong day gave the right number by luck. The
+  agent changed the example and added a test that nudges one earlier day's price at a time
+  and checks that each input changes only for the days it is meant to read. A test that has
+  never been seen to fail proves little.
+- A test found a real fault: after an unexpected crash, the response carried a trace id in
+  its body but not in its header. The agent fixed the service, not the test.
+- Writing the tests for the error measures exposed two cases that would have crashed: a test
+  period with no days, and one where the price never moved. Both are now handled.
+- The replaced model in break 3 passed every behaviour test and was 3.3% worse than naive,
+  inside the 5% bar. Only the golden tests can tell that a model has changed.
+- Two failures were the agent's workspace, not the service: Docker had stopped (the smoke
+  tests could not connect), and the workspace's proxy address had changed, so the container
+  could not reach the price source. In that state the smoke test still passed, through its
+  "clear 503" branch; with the setup fixed it passed with a real forecast.
+
+**How we would explain this stage to a colleague · كيف نشرح هذه المرحلة لزميل**
+(Agent's draft, to rewrite in my own words.) We test at six levels. Many small tests check
+one rule each in milliseconds, with invented prices and a stand-in model, so they never
+depend on the internet. A few tests use the real model to check promises about its behaviour,
+and golden tests compare its answers with the ones we saved from the notebook. Slow tests go
+to the real price source, and a smoke test checks the container. We broke the code on purpose
+three times to see that a test fails each time, and the first attempt showed that one of our
+tests was too weak.
+
+**Open questions · أسئلة ما زالت مفتوحة**
+- The `train` command has no test (see coverage above).
+- The smoke test accepts our own "price source unavailable" answer, so a container that can
+  never reach prices still passes. Is that acceptable for the pipeline?
+- Error messages repeat the names of the fields a caller sent (for example "tiker"), though
+  never the values. Should names be limited too?
+- The 5% quality bar is a choice, not a measurement. What should it be?
+
+---
+
 Stages: 0 Track and model · 1 Clean architecture · 2 FastAPI endpoint · 3 Container ·
 4 Tests · 5 GitHub Actions · 6 Secrets · Extension: React front end (optional)
 

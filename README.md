@@ -85,6 +85,24 @@ The image is built in two stages from `python:3.12-slim`, installs the exact ver
 `requirements.lock`, runs as the normal user `appuser`, and reports its own readiness. Only
 `requirements.lock`, `models/` and `src/` may enter the build (see `.dockerignore`).
 
+## Tests
+
+```bash
+pytest                                    # 128 fast tests, about a second, no internet
+pytest --cov --cov-report=term-missing    # the same, plus which lines no test runs
+pytest -m network                         # 4 slow tests against the real price source
+docker compose up --build -d && pytest -m smoke   # 4 tests against the running container
+```
+
+| Level | What it protects | Where |
+|---|---|---|
+| Unit | One small rule at a time: the eight inputs, the naive guess, the market clock, the price memory, the settings | `tests/unit/` |
+| Integration | The API's contract, from outside, with a stand-in model and stand-in prices | `tests/integration/` |
+| Model behaviour | Promises about the real model on made-up prices: only the past counts, the forecast stays near today's price | `tests/behaviour/` |
+| Golden | The committed model still gives the notebook's saved answers | `tests/golden/` |
+| Data checks | The real prices are in order, on trading days, fresh and without impossible jumps | `tests/data/` |
+| Smoke | The container starts and answers like our service | `tests/smoke/` |
+
 ## Where the model and the prices live
 
 The trained model is two small files in `models/` (about 3 KB together). They are stored in
@@ -103,4 +121,4 @@ uv pip compile pyproject.toml --python-version 3.12 --python-platform linux \
 ## Stages
 
 0 Meet the model · **1 Clean architecture (done)** · **2 FastAPI endpoint (done)** · **3 Container (done)** ·
-4 Tests · 5 GitHub Actions · 6 Secrets
+**4 Tests (done)** · 5 GitHub Actions · 6 Secrets

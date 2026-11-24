@@ -21,10 +21,34 @@ dependencies = [
 
 [project.optional-dependencies]
 # matplotlib is only needed by scripts/save_golden.py, which runs the notebook's own cells.
-dev = ["pytest>=8", "ruff", "import-linter", "matplotlib"]
+dev = ["pytest>=8", "pytest-cov", "httpx", "ruff", "import-linter", "matplotlib"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+# By default run everything that needs no internet and no running container.
+#   pytest                 the per-commit gate, seconds
+#   pytest -m network      the slow checks against the real price source
+#   pytest -m smoke        against a running container (SMOKE_URL, default localhost:8000)
+addopts = "-q --strict-markers -m 'not network and not smoke'"
+testpaths = ["tests"]
+markers = [
+    "unit: one small rule, alone, in milliseconds",
+    "integration: the API from the outside, with a stand-in model and stand-in prices",
+    "behaviour: how the real model behaves, on made-up prices",
+    "golden: the same inputs still give the notebook's answers",
+    "data: the prices are what we expect",
+    "network: needs the internet (the real price source); slow, not in the per-commit gate",
+    "smoke: needs a running container",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["stocks_service"]
+
+[tool.coverage.report]
+exclude_also = ["if __name__ == .__main__.:", "\\.\\.\\.$"]
 
 [tool.ruff]
 line-length = 100
