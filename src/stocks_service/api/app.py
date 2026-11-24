@@ -130,5 +130,9 @@ def _trace_id(request: Request) -> str:
 def _error(request: Request, status: int, code: str, message: str,
            headers: Mapping[str, str] | None = None, **extra: object) -> JSONResponse:
     """One error shape for every failure: {"error": {code, message, trace_id}}."""
-    body = {"code": code, "message": message, "trace_id": _trace_id(request), **extra}
-    return JSONResponse(status_code=status, content={"error": body}, headers=headers)
+    trace_id = _trace_id(request)
+    body = {"code": code, "message": message, "trace_id": trace_id, **extra}
+    # The trace id is set here as well as in the middleware: after an unexpected crash the
+    # middleware never gets the response back, and the caller still needs the id to quote.
+    return JSONResponse(status_code=status, content={"error": body},
+                        headers={**(headers or {}), "X-Trace-Id": trace_id})

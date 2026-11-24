@@ -107,6 +107,8 @@ def _sign(x: float) -> int:
 def evaluate(rows: Sequence[TrainingRow], predicted_moves: Sequence[float]) -> Metrics:
     """Compare the model with the naive guess on days it never saw while learning."""
     n = len(rows)
+    if n == 0:
+        raise ValueError("no test days to evaluate on")
     model_errors = [row.next_close - row.close * (1 + move)
                     for row, move in zip(rows, predicted_moves, strict=True)]
     naive_errors = [row.next_close - row.close for row in rows]
@@ -120,6 +122,6 @@ def evaluate(rows: Sequence[TrainingRow], predicted_moves: Sequence[float]) -> M
         naive_rmse_sar=sqrt(sum(e * e for e in naive_errors) / n),
         model_mape_pct=sum(abs(e) / row.next_close for e, row in zip(model_errors, rows)) / n * 100,
         naive_mape_pct=sum(abs(e) / row.next_close for e, row in zip(naive_errors, rows)) / n * 100,
-        direction_hit_pct=hits / len(moved) * 100,
+        direction_hit_pct=hits / len(moved) * 100 if moved else 0.0,
         days_that_moved=len(moved),
     )

@@ -19,7 +19,8 @@ class ForecastService:
         self._check_ticker(ticker)
         history = self._prices.history(ticker, start=as_of - self._lookback,
                                        end=as_of + timedelta(days=1))
-        return self.forecast_from(history)
+        # Never trust the source on this: a day after as_of would leak the future.
+        return self.forecast_from(history.up_to(as_of))
 
     def forecast_from(self, history: PriceHistory) -> Forecast:
         """Forecast from prices we already hold. No download, so it is easy to check."""
