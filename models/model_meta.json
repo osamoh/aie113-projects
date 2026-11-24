@@ -1,0 +1,43 @@
+{
+  "model_version": "stocks-ridge-1.0.0",
+  "ticker": "2222.SR",
+  "target": "next trading day's closing price in SAR, predicted as a move from today's close",
+  "features": [
+    "ret_1d",
+    "ret_lag1",
+    "ret_lag2",
+    "ret_5d",
+    "gap_ma5",
+    "gap_ma20",
+    "vol_10d",
+    "day_of_week"
+  ],
+  "model_kind": "ridge regression on scaled inputs",
+  "ridge_alpha": 1000.0,
+  "sklearn_version": "1.9.1",
+  "train": {
+    "start": "2021-11-29",
+    "end": "2025-10-30",
+    "rows": 950
+  },
+  "test": {
+    "start": "2025-11-02",
+    "end": "2026-10-28",
+    "rows": 245
+  },
+  "metrics_test": {
+    "model": {
+      "mae_sar": 0.1732,
+      "rmse_sar": 0.2436,
+      "mape_pct": 0.6655,
+      "direction_hit_pct": 51.33
+    },
+    "naive_baseline": {
+      "mae_sar": 0.1712,
+      "rmse_sar": 0.2408,
+      "mape_pct": 0.658
+    },
+    "mae_improvement_vs_naive_pct": -1.17
+  },
+  "created_at": "2026-11-24T15:37:30+00:00"
+}

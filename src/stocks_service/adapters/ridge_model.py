@@ -4,12 +4,14 @@ The only file that imports scikit-learn, pandas or joblib. Replacing the model m
 this file; nothing in domain/ or service/ changes.
 """
 import json
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 
 import joblib
 import pandas as pd
 import sklearn
+from sklearn.exceptions import InconsistentVersionWarning
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -92,5 +94,8 @@ class JoblibModelStore:
     def load(self) -> RidgeForecastModel:
         facts = self.facts()
         # A pickle: load it only from a path we control, with the versions that wrote it.
-        pipeline = joblib.load(self._model_path)
+        with warnings.catch_warnings():
+            # Written by another scikit-learn version? It may load and still be wrong: refuse.
+            warnings.simplefilter("error", InconsistentVersionWarning)
+            pipeline = joblib.load(self._model_path)
         return RidgeForecastModel(pipeline, str(facts["model_version"]), str(facts["ticker"]))

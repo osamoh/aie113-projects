@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STOCKS_", env_file=".env")
+    # extra="ignore": a .env file may hold other programs' variables. Without it, one unknown
+    # line stops the service AND the error message prints that line's value, secret or not.
+    model_config = SettingsConfigDict(env_prefix="STOCKS_", env_file=".env", extra="ignore")
 
     ticker: str = "2222.SR"               # Saudi Aramco on Tadawul (Yahoo Finance symbol)
     start_date: date = date(2021, 11, 1)  # about five years of history
@@ -19,8 +21,9 @@ class Settings(BaseSettings):
     test_start: date = date(2025, 11, 1)  # the last 12 months are kept for the final test
     alphas: tuple[float, ...] = (0.1, 1, 10, 100, 1000, 3000, 10000)
     model_version: str = "stocks-ridge-1.0.0"
-    model_path: Path = Path("artifacts/model.joblib")
-    meta_path: Path = Path("artifacts/model_meta.json")
+    # The model lives in git and inside the image: small files, reviewed like code.
+    model_path: Path = Path("models/model.joblib")
+    meta_path: Path = Path("models/model_meta.json")
     lookback_days: int = 90               # calendar days of prices fetched for one forecast
     price_cache_minutes: float = 15       # how long downloaded prices are remembered
     top_reasons: int = 3                  # how many reasons the API shows with a forecast

@@ -20,7 +20,7 @@ tracks/*/data/
 age-key.txt
 keys.txt
 
-# The trained model and its facts file: made by "train", never stored in git
+# Left behind by running the starter notebook. The service's own model is in models/.
 artifacts/
 *.egg-info/
 .ruff_cache/
