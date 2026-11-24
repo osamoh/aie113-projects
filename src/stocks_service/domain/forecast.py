@@ -12,6 +12,7 @@ from stocks_service.domain.features import FEATURE_WORDS, Features, TrainingRow
 
 DISCLAIMER = "A teaching example, not investment advice."
 HALALAS_PER_SAR = 100
+DAY_NAMES = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,13 @@ class Reason:
     label: str          # the same in plain words, for example "move two days ago"
     value: float        # the input's value on that day
     push_halalas: float  # how far this input pushed the forecast up (+) or down (-)
+
+    @property
+    def value_text(self) -> str:
+        """The value as a person reads it: a weekday name, or a move in percent."""
+        if self.name == "day_of_week":
+            return DAY_NAMES[int(self.value)]
+        return f"{self.value * 100:+.2f}%"
 
 
 @dataclass(frozen=True, slots=True)

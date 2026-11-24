@@ -13,7 +13,8 @@ from stocks_service.adapters.ridge_model import JoblibModelStore, RidgeTrainer
 from stocks_service.adapters.yahoo_prices import YahooPriceSource
 from stocks_service.config import Settings
 from stocks_service.domain.errors import NotEnoughHistory, PriceSourceUnavailable, UnknownTicker
-from stocks_service.domain.forecast import Forecast, Reason
+from stocks_service.domain.forecast import Forecast
+from stocks_service.domain.market import latest_complete_day
 from stocks_service.service.forecasting import ForecastService
 from stocks_service.service.training import TrainingService
 
@@ -55,7 +56,7 @@ def _render(f: Forecast, improvement_vs_naive_pct: float) -> str:
         f"  Naive forecast:  {f.naive_close:.2f} SAR (tomorrow = today)",
         f"Why: starting point {f.start_halalas:+.2f} halalas, then each input pushes:",
     ]
-    lines += [f"  {r.label:<30} {_value(r, f.as_of):>9}  {r.push_halalas:+.2f} halalas"
+    lines += [f"  {r.label:<30} {r.value_text:>9}  {r.push_halalas:+.2f} halalas"
               for r in f.reasons]
     lines += [
         (f"Model {f.model_version}. On its test year its average error was "
@@ -63,12 +64,6 @@ def _render(f: Forecast, improvement_vs_naive_pct: float) -> str:
         f.disclaimer,
     ]
     return "\n".join(lines)
-
-
-def _value(reason: Reason, as_of: date) -> str:
-    if reason.name == "day_of_week":
-        return calendar.day_name[as_of.weekday()]
-    return f"{reason.value * 100:+.2f}%"
 
 
 def main() -> None:
@@ -79,7 +74,8 @@ def main() -> None:
     one = commands.add_parser("forecast", help="forecast the next trading day")
     one.add_argument("--ticker", default=None, help="default: the configured share")
     one.add_argument("--as-of", type=date.fromisoformat, default=None,
-                     help="use prices up to this day (YYYY-MM-DD); default: today")
+                     help="use prices up to this day (YYYY-MM-DD); "
+                          "default: the latest finished trading day")
     args = parser.parse_args()
 
     settings = Settings()
@@ -87,7 +83,8 @@ def main() -> None:
         if args.command == "train":
             train(settings)
         else:
-            forecast(settings, args.ticker or settings.ticker, args.as_of or date.today())
+            as_of = args.as_of or latest_complete_day(datetime.now(UTC))
+            forecast(settings, args.ticker or settings.ticker, as_of)
     except (UnknownTicker, NotEnoughHistory, PriceSourceUnavailable) as problem:
         sys.exit(f"Cannot do that: {problem}")
     except FileNotFoundError as missing:

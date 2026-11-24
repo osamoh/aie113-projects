@@ -16,6 +16,7 @@ dependencies = [
     "joblib==1.6.0",
     "yfinance>=1.8",
     "pydantic-settings>=2.3",
+    "fastapi[standard]>=0.115",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ include_external_packages = true
 name = "Layers: entry points -> adapters -> service -> domain"
 type = "layers"
 layers = [
-    "stocks_service.cli",
+    "stocks_service.api | stocks_service.cli",
     "stocks_service.adapters",
     "stocks_service.service",
     "stocks_service.domain",
@@ -47,4 +48,7 @@ layers = [
 name = "Domain and service use no tools (no model, data or web library)"
 type = "forbidden"
 source_modules = ["stocks_service.domain", "stocks_service.service"]
-forbidden_modules = ["pandas", "numpy", "sklearn", "joblib", "yfinance", "pydantic", "pydantic_settings"]
+forbidden_modules = [
+    "pandas", "numpy", "sklearn", "joblib", "yfinance",
+    "pydantic", "pydantic_settings", "fastapi", "starlette",
+]

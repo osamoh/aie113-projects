@@ -126,9 +126,92 @@ notebook's answers for five days, and afterwards we proved the new code gives th
 - Yahoo can correct old prices. If it does, the golden check will fail although our code did
   not change. Should later tests use saved or made-up prices instead of a live download?
 - Run before the market closes, `forecast` would use a part-day price as "today's close". The
-  service needs a rule for this (Stage 2).
+  service needs a rule for this. (Answered in Stage 2: `domain/market.py`.)
 - The golden file holds five days of closing prices, while the track asks that price data stay
   out of the repository. Is that small amount acceptable?
+
+---
+
+## Stage 2: FastAPI endpoint · نقطة نهاية FastAPI
+
+**Status: DRAFT by the agent.**
+
+**What we asked the agent · ما طلبناه من الوكيل**
+- "Go to the next stage." Before writing code the agent explained the idea, showed the request
+  and the response as examples, listed the errors, and proposed two rules: only finished
+  trading days count, and downloaded prices are remembered for 15 minutes. I approved the plan.
+
+**What it built · ما بناه**
+- `api/schemas.py`: the exact shape of a request (`{"ticker": "..."}`, nothing else allowed)
+  and of a response.
+- `api/routes.py`: four addresses: `POST /v1/forecast`, `GET /v1/health`, `GET /v1/ready`,
+  `GET /v1/model-info`.
+- `api/app.py`: loads the model once at start-up, gives every request a trace id, and turns
+  every failure into one error shape, `{"error": {"code", "message", "trace_id"}}`.
+- `domain/market.py`: the rule "today's price counts only from 4:00 pm Riyadh time", after the
+  exchange's closing auction. Before that the latest price is the previous trading day's.
+- `adapters/cached_prices.py`: a 15-minute memory in front of the price source.
+- Small changes: new settings in `config.py`; FastAPI in `pyproject.toml`, and the import
+  rules now cover `api`; the command line uses the same "finished days" rule.
+- `service/forecasting.py` did not need to change.
+
+**What we checked, and what we saw · ما تحققنا منه وما رأيناه**
+All of this was run by the agent in its own workspace, on Tuesday 24 November 2026 after the
+market had closed.
+- Good request, `{"ticker": "2222.SR"}`: HTTP 200 with `as_of` 2026-11-24, last close 26.30 SAR,
+  model forecast 26.315 SAR (+1.52 halalas), naive guess 26.30 SAR, three reasons (the biggest:
+  today's move of +0.61% pushed +1.23 halalas), `model_vs_naive_pct` −1.17 and the disclaimer.
+- Bad request, `{"tiker": "2222.SR"}`: HTTP 422 `INVALID_REQUEST` naming two problems, "ticker:
+  Field required" and "tiker: Extra inputs are not permitted", without repeating what was sent.
+- Also rejected with 422: an empty body, a number instead of text, a 26-character "ticker" with
+  SQL in it, an extra field `is_admin`, and a body that is not JSON.
+- `{"ticker": "1120.SR"}`: HTTP 404 `UNKNOWN_TICKER`, "This model only knows 2222.SR".
+- A wrong address: 404 `NOT_FOUND`. `GET` on the forecast address: 405. Both in the same shape.
+- Readiness looks at one thing: is the model loaded. It does not call the price source, so a
+  failing third party cannot make the whole service look dead. Started with no model file,
+  the service refuses to start and prints "No trained model at ... Run: python -m
+  stocks_service.cli train".
+- With a fake clock: Tuesday 10:00 and 15:59 Riyadh gave `as_of` 2026-11-23 (close 26.14);
+  16:00 gave 2026-11-24 (close 26.30); Saturday noon gave Thursday 2026-11-19.
+- With a fake price source that fails: HTTP 503 `PRICE_SOURCE_UNAVAILABLE` with
+  `Retry-After: 60`. The source's own error text appeared only in the server log.
+- With a fake source that crashes with "database password is hunter2": the caller saw only
+  `INTERNAL_ERROR` and a trace id; the message and stack trace were only in the server log.
+- The first forecast took 647 ms (one download); the same request again took 4 ms.
+- `/docs` and `/openapi.json` answered 200. Golden check still 5/5. `ruff` and `lint-imports`
+  passed.
+- Broken on purpose: the rule "only the share we trained on" was switched off. The service
+  then answered HTTP 200 for `1120.SR` with a confident forecast of 61.086 SAR, made by a model
+  that has only ever seen Aramco. After undoing it, 404 again.
+- Mine to do: start the service on my Mac, open http://localhost:8000/docs, send one good and
+  three bad requests, and note what I saw.
+
+**What surprised us or went wrong · ما فاجأنا أو ما تعثرنا فيه**
+- A wrong answer can look completely healthy: with the ticker rule off, nothing failed and
+  the response had the right shape. Only a rule (and later a test) protects against that.
+- The first "not JSON" error named the field "1", which means nothing to a caller. The agent
+  changed it to say "The body is not valid JSON".
+- One of the agent's own check scripts first reported HTTP 500 for "too few days". The server's
+  traceback showed the fault was in the check script (FastAPI tried to copy the fake price
+  source), not in the service. After fixing the script the service answered 503
+  `NOT_ENOUGH_PRICES` as designed.
+
+**How we would explain this stage to a colleague · كيف نشرح هذه المرحلة لزميل**
+(Agent's draft, to rewrite in my own words.) The API is the only door to the model. Its
+contract says a request is one field, the ticker, and FastAPI rejects anything else before our
+code runs. A good answer always carries the naive guess, the reasons and the "not investment
+advice" note, so nobody can show the forecast without its context. Every failure has the same
+shape and tells the caller what was wrong without repeating their input or our internals; the
+details go to the log under a trace id. The model is loaded once at start-up, and readiness
+means exactly that: the model is loaded.
+
+**Open questions · أسئلة ما زالت مفتوحة**
+- The service does not know public holidays, so it says "next trading day" without a date.
+- If the price source publishes today's close later than 4:00 pm, we would serve yesterday's
+  close as the latest for a while. `as_of` in the response makes this visible.
+- The 15-minute memory lives inside one process. With several worker processes each has its
+  own, so the price source is asked more often than the setting suggests.
+- Anyone who can reach the address can call it. An access key is a topic for Stage 6.
 
 ---
 
