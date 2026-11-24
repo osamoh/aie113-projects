@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stocks-service"
+version = "1.0.0"
+description = "Next-day closing price forecast for Saudi Aramco, with the naive baseline. A teaching example, not investment advice (SDAIA Academy, SDA-AIE-113)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # The saved model is a pickle: it only loads with the versions that wrote it.
+    "scikit-learn==1.9.1",
+    "numpy==2.5.5",
+    "pandas==3.1.1",
+    "joblib==1.6.0",
+    "yfinance>=1.8",
+    "pydantic-settings>=2.3",
+]
+
+[project.optional-dependencies]
+# matplotlib is only needed by scripts/save_golden.py, which runs the notebook's own cells.
+dev = ["pytest>=8", "ruff", "import-linter", "matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "scripts", "tests"]
+
+[tool.importlinter]
+root_package = "stocks_service"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: entry points -> adapters -> service -> domain"
+type = "layers"
+layers = [
+    "stocks_service.cli",
+    "stocks_service.adapters",
+    "stocks_service.service",
+    "stocks_service.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain and service use no tools (no model, data or web library)"
+type = "forbidden"
+source_modules = ["stocks_service.domain", "stocks_service.service"]
+forbidden_modules = ["pandas", "numpy", "sklearn", "joblib", "yfinance", "pydantic", "pydantic_settings"]

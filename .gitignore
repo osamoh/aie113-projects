@@ -19,3 +19,9 @@ tracks/*/data/
 *.agekey
 age-key.txt
 keys.txt
+
+# The trained model and its facts file: made by "train", never stored in git
+artifacts/
+*.egg-info/
+.ruff_cache/
+.import_linter_cache/
